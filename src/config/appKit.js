@@ -1,4 +1,4 @@
-import { baseSepolia } from '@reown/appkit/networks'
+import { base } from '@reown/appkit/networks'
 import { AppKit, createAppKit } from '@reown/appkit'
 import { EthersAdapter } from '@reown/appkit-adapter-ethers'
 
@@ -13,7 +13,7 @@ let appKit;
 export function initializeModal() {
     appKit = createAppKit({
         adapters: [new EthersAdapter()],
-        networks: [baseSepolia],
+        networks: [base],
         projectId,
         // themeMode: theme.value,
         features: {
