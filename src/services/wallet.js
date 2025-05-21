@@ -265,10 +265,10 @@ export const buyNftByUsdc = async (tokenId) => {
 
     // 4. 签名数据（EIP-712）
     const domain = {
-        // name: "USD Coin",
-        // version: "2",
-        name: "USDT",
-        version: "1",
+        name: "USD Coin",
+        version: "2",
+        // name: "USDT",
+        // version: "1",
         chainId: store.networkState.chainId, // Base 主网 chainId 
         verifyingContract: contractStore.USDC,
     };
