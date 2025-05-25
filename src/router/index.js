@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { appKit } from '@/config/appKit'
+import PetsView from '../views/PetsView.vue' // Import PetsView
 
 const routes = [
   {
@@ -35,6 +36,12 @@ const routes = [
     meta: {
       requiresAuth: true
     }
+  },
+  {
+    path: '/pets',
+    name: 'PetsView',
+    component: PetsView
+    // meta: { requiresAuth: true } // Optional: Add if pets view needs auth
   }
 ]
 

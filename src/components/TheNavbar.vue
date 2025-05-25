@@ -31,6 +31,7 @@
         <div class="nav-links">
           <router-link to="/" class="nav-item">{{ t('nav.home') }}</router-link>
           <router-link to="/marketplace" class="nav-item">{{ t('nav.marketplace') }}</router-link>
+          <router-link to="/pets" class="nav-item">3D Pets</router-link> 
           <router-link to="/profile" class="nav-item">{{ t('nav.profile') }}</router-link>
         </div>
 
@@ -59,6 +60,7 @@
     <van-tabbar v-if="isMobile" v-model="activeTab" class="mobile-nav" fixed>
       <van-tabbar-item name="home" icon="home-o" to="/">{{ t('nav.home') }}</van-tabbar-item>
       <van-tabbar-item name="marketplace" icon="shop-o" to="/marketplace">{{ t('nav.marketplace') }}</van-tabbar-item>
+      <van-tabbar-item name="pets" icon="like-o" to="/pets">3D Pets</van-tabbar-item> <!-- Added for mobile -->
       <van-tabbar-item name="profile" icon="user-o" to="/profile">{{ t('nav.profile') }}</van-tabbar-item>
     </van-tabbar>
   </div>

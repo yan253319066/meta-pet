@@ -2,6 +2,8 @@ package com.metapet.backend;
 
 import com.metapet.backend.dto.AIChatRequest;
 import com.metapet.backend.dto.AIChatResponse;
+import com.metapet.backend.dto.EmoteRequest; // New DTO
+import com.metapet.backend.dto.EmoteResponse; // New DTO
 import com.metapet.backend.dto.FeedRequest;
 import com.metapet.backend.dto.FeedResponse;
 import com.metapet.backend.service.AIChatService;
@@ -15,14 +17,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono; // Import Mono
+import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/pets")
-@CrossOrigin("*") // Allow all origins for simplicity
+@CrossOrigin("*") 
 public class Pet3DController {
 
     private static final Map<String, PetData> mockPetDatabase = new HashMap<>();
@@ -53,9 +55,8 @@ public class Pet3DController {
 
     @PostMapping("/chat")
     public Mono<AIChatResponse> chatWithPet(@RequestBody AIChatRequest chatRequest) {
-        // Call the reactive service method
         return aiChatService.getRealAIResponse(chatRequest.getMessage())
-                .map(AIChatResponse::new); // Map the String reply to AIChatResponse
+                .map(AIChatResponse::new); 
     }
 
     @PostMapping("/feed")
@@ -66,5 +67,20 @@ public class Pet3DController {
         String petName = (pet != null) ? pet.getName() : "the pet";
         String statusMessage = "Successfully fed " + petName + " (NFT ID: " + feedRequest.getNftId() + ").";
         return new FeedResponse(statusMessage);
+    }
+
+    @PostMapping("/emote")
+    public EmoteResponse triggerEmote(@RequestBody EmoteRequest emoteRequest) {
+        // Log the emote action
+        petLogService.recordEmoteAction(emoteRequest.getUserId(), emoteRequest.getNftId(), emoteRequest.getEmoteType());
+
+        // Simulate metadata update for the emote
+        metadataUpdateService.simulateMetadataUpdateForEmote(emoteRequest.getNftId(), emoteRequest.getEmoteType());
+
+        PetData pet = mockPetDatabase.get(emoteRequest.getNftId());
+        String petName = (pet != null) ? pet.getName() : "The pet";
+        String statusMessage = petName + " performed emote: " + emoteRequest.getEmoteType() + ".";
+        
+        return new EmoteResponse(statusMessage, emoteRequest.getEmoteType());
     }
 }
