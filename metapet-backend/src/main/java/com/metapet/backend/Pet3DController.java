@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono; // Import Mono
 
 import java.util.HashMap;
 import java.util.Map;
@@ -51,23 +52,18 @@ public class Pet3DController {
     }
 
     @PostMapping("/chat")
-    public AIChatResponse chatWithPet(@RequestBody AIChatRequest chatRequest) {
-        String reply = aiChatService.getMockResponse(chatRequest.getMessage());
-        return new AIChatResponse(reply);
+    public Mono<AIChatResponse> chatWithPet(@RequestBody AIChatRequest chatRequest) {
+        // Call the reactive service method
+        return aiChatService.getRealAIResponse(chatRequest.getMessage())
+                .map(AIChatResponse::new); // Map the String reply to AIChatResponse
     }
 
     @PostMapping("/feed")
     public FeedResponse feedPet(@RequestBody FeedRequest feedRequest) {
-        // Log the action
         petLogService.recordFeedAction(feedRequest.getUserId(), feedRequest.getNftId());
-
-        // Simulate metadata update
         metadataUpdateService.simulateMetadataUpdateForFeed(feedRequest.getNftId());
-
-        // Retrieve pet's name for the response message
         PetData pet = mockPetDatabase.get(feedRequest.getNftId());
-        String petName = (pet != null) ? pet.getName() : "the pet"; // Fallback name
-
+        String petName = (pet != null) ? pet.getName() : "the pet";
         String statusMessage = "Successfully fed " + petName + " (NFT ID: " + feedRequest.getNftId() + ").";
         return new FeedResponse(statusMessage);
     }
