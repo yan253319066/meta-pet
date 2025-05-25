@@ -14,7 +14,7 @@ export const fetchUserNFTs = (userId) => {
       name: 'RoboDog X1 Prime',
       contractAddress: '0xabc123...',
       tokenId: '101',
-      imageUrl: 'images/robodog_x1.png',
+      imageUrl: 'https://harlequin-immense-fox-43.mypinata.cloud/ipfs/QmVhhM5eCPSVYdUiGXQxoKaBXSEcJxtDMKxj1EZikJLhmV',
       metadata: {
         modelType: 'dog',
         color: 'Metallic Silver',
@@ -31,7 +31,7 @@ export const fetchUserNFTs = (userId) => {
       name: 'CyberCat Z2 Advanced',
       contractAddress: '0xdef456...',
       tokenId: '202',
-      imageUrl: 'images/cybercat_z2.png',
+      imageUrl: 'https://harlequin-immense-fox-43.mypinata.cloud/ipfs/QmVhhM5eCPSVYdUiGXQxoKaBXSEcJxtDMKxj1EZikJLhmV',
       metadata: {
         modelType: 'cat',
         color: 'Neon Pink',
@@ -48,7 +48,7 @@ export const fetchUserNFTs = (userId) => {
       name: 'PixelBird A3 Skywing',
       contractAddress: '0xghi789...',
       tokenId: '303',
-      imageUrl: 'images/pixelbird_a3.png',
+      imageUrl: 'https://harlequin-immense-fox-43.mypinata.cloud/ipfs/QmVhhM5eCPSVYdUiGXQxoKaBXSEcJxtDMKxj1EZikJLhmV',
       metadata: {
         modelType: 'dragon',
         color: 'Sky Blue',
@@ -65,7 +65,7 @@ export const fetchUserNFTs = (userId) => {
       name: 'MechaPanda G4 Guardian',
       contractAddress: '0xjkl012...',
       tokenId: '404',
-      imageUrl: 'images/mechapanda_g4.png',
+      imageUrl: 'https://harlequin-immense-fox-43.mypinata.cloud/ipfs/QmVhhM5eCPSVYdUiGXQxoKaBXSEcJxtDMKxj1EZikJLhmV',
       metadata: {
         modelType: 'panda',
         color: 'Black & White',
@@ -82,7 +82,7 @@ export const fetchUserNFTs = (userId) => {
       name: 'VoidKraken Tentaclon',
       contractAddress: '0xmno345...',
       tokenId: '505',
-      imageUrl: 'images/voidkraken.png',
+      imageUrl: 'https://harlequin-immense-fox-43.mypinata.cloud/ipfs/QmVhhM5eCPSVYdUiGXQxoKaBXSEcJxtDMKxj1EZikJLhmV',
       metadata: {
         modelType: 'kraken',
         color: '#8A2BE2',
@@ -99,6 +99,6 @@ export const fetchUserNFTs = (userId) => {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve(userNFTs);
-    }, 500); 
+    }, 500);
   });
 };

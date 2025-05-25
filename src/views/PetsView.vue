@@ -487,9 +487,10 @@ const selectNFT = async (nft) => {
   if (synth && synth.speaking) synth.cancel();
 
   try {
-    const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`);
-    if (!displayDataResponse.ok) throw new Error(`HTTP error! status: ${displayDataResponse.status}`);
-    const backendDisplayProfile = await displayDataResponse.json();
+    // const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`);
+    // if (!displayDataResponse.ok) throw new Error(`HTTP error! status: ${displayDataResponse.status}`);
+    // const backendDisplayProfile = await displayDataResponse.json();
+    const backendDisplayProfile = {modelType: 'dog', color: 'blue'};
     selectedPetData.value = { 
       id: nft.id, displayName: nft.name,
       modelType: backendDisplayProfile.modelType, color: backendDisplayProfile.color,
@@ -505,13 +506,14 @@ const selectNFT = async (nft) => {
     if (isMobile.value) activeMobileTab.value = '3d-space';
     
     isPetTyping.value = true; 
-    const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'tempUser', message: `Hello, I'm ${selectedPetData.value.displayName}` })
-    });
-    const greetingData = await greetingResponse.json(); 
-    if (!greetingResponse.ok) throw new Error(greetingData.reply || `Greeting HTTP error!`);
-    const greetingText = greetingData.reply;
+    // const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, {
+    //     method: 'POST', headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({ userId: 'tempUser', message: `Hello, I'm ${selectedPetData.value.displayName}` })
+    // });
+    // const greetingData = await greetingResponse.json(); 
+    // if (!greetingResponse.ok) throw new Error(greetingData.reply || `Greeting HTTP error!`);
+    // const greetingText = greetingData.reply;
+    const greetingText = "Hello, I'm MetaPet";
     chatMessages.value.push({ sender: 'pet', text: greetingText, timestamp: new Date() });
     speakText(greetingText);
 
