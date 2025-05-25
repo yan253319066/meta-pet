@@ -1,109 +1,245 @@
 <template>
-  <div class="pets-view-container">
-    <!-- Left Column: NFT List -->
-    <div class="column left-column">
-      <h2>My 3D Pets</h2>
-      <div v-if="isLoadingNFTList" class="loading-nft-list">Loading your pets...</div>
-      <ul v-else-if="userNFTs.length > 0">
-        <li v-for="nft in userNFTs" :key="nft.id" @click="selectNFT(nft)" 
-            :class="{ 'selected-nft': selectedNftId === nft.id }">
-          {{ nft.name }} <span class="nft-rarity">({{ nft.metadata.rarity }})</span>
-        </li>
-      </ul>
-      <div v-else>No pets found.</div>
-    </div>
-
-    <!-- Center Column: 3D Scene -->
-    <div class="column center-column" ref="sceneContainer">
-      <div v-if="isModelLoading" class="model-loading-indicator">
-        Loading 3D Model...
-      </div>
-    </div>
-
-    <!-- Right Column: Chat/Controls & Pet Data -->
-    <div class="column right-column">
-      <div v-if="selectedPetData" class="chat-interface-container">
-        <h3>Chat with {{ selectedPetData.displayName }}</h3>
-        <div class="pet-info-bar">
-          <p><strong>Name:</strong> {{ selectedPetData.displayName }}</p>
-          <p><strong>Type:</strong> {{ selectedPetData.modelType }} | <strong>Color:</strong> {{ selectedPetData.color }} | <strong>Level:</strong> {{ selectedPetData.level }}</p>
-           <p v-if="selectedPetData.fullNftData"><strong>Rarity:</strong> {{ selectedPetData.fullNftData.metadata.rarity }}</p>
-        </div>
-
-        <div class="pet-actions-bar">
-          <button @click="feedPet" :disabled="isAnyActionActive" class="action-button feed-button">Feed {{ selectedPetData.displayName }}</button>
-          <button @click="triggerHappyEmote" :disabled="isAnyActionActive" class="action-button emote-button">Happy 🎉</button>
-          <button @click="triggerSpinEmote" :disabled="isAnyActionActive" class="action-button emote-button">Spin 💫</button>
-          <button @click="triggerWiggleEmote" :disabled="isAnyActionActive" class="action-button emote-button">Wiggle ✨</button>
-        </div>
-        
-        <div class="animation-controls-bar" v-if="availableAnimations.length > 0">
-          <h4>Animations:</h4>
-          <button v-for="animName in availableAnimations" :key="animName" 
-                  @click="playAnimation(animName)" 
-                  :disabled="isAnyActionActive"
-                  class="action-button animation-button">
-            Play {{ animName }}
-          </button>
-        </div>
-        
-        <div class="chat-messages-area" ref="chatMessagesArea">
-          <div v-for="(message, index) in chatMessages" :key="index" 
-               :class="['chat-message', message.sender === 'user' ? 'user-message' : 'pet-message', message.sender === 'system' ? 'system-message' : '']">
-            <span class="message-sender">
-              {{ message.sender === 'user' ? 'You' : (message.sender === 'pet' ? selectedPetData.displayName : 'System') }}:
-            </span>
-            <span class="message-text" v-html="message.text"></span>
-            <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-          </div>
-          <div v-if="isPetTyping" class="chat-message pet-message typing-indicator">
-            <span class="message-sender">{{ selectedPetData.displayName }}: </span>
-            <span class="message-text">
-              <i>typing<span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span></i>
-            </span>
+  <div class="pets-view-page-container">
+    <!-- Mobile Layout: Tabs -->
+    <van-tabs v-if="isMobile" v-model:active="activeMobileTab" sticky @change="onMobileTabChange">
+      <van-tab name="my-pets" title="My Pets">
+        <div class="nft-list-container mobile-list-container">
+          <h2>My 3D Pets</h2>
+          <van-loading v-if="isLoadingNFTList" type="spinner" vertical class="list-loading">Loading pets...</van-loading>
+          <van-list v-else-if="userNFTs.length > 0" class="nft-vant-list">
+            <van-cell 
+              v-for="nft in userNFTs" 
+              :key="nft.id" 
+              :title="nft.name" 
+              :label="`Rarity: ${nft.metadata.rarity} | Level: ${nft.metadata.level}`" 
+              is-link 
+              @click="selectNFT(nft)"
+              :class="{ 'selected-nft-vant': selectedNftId === nft.id }"
+            />
+          </van-list>
+          <div v-else class="empty-state-pets">
+            <van-empty description="No pets found." />
           </div>
         </div>
-        
-        <div class="chat-input-area">
-          <input type="text" v-model="currentUserMessage" @keyup.enter="sendMessage" placeholder="Type your message..." :disabled="isAnyActionActive"/>
-          <button @click="toggleVoiceListening" 
-                  :class="['mic-button', { 'is-listening': isListening, 'not-supported': !speechApiSupported }]" 
-                  :disabled="!speechApiSupported || isAnyActionActiveButVoice"
-                  :title="speechApiSupported ? (isListening ? 'Stop Listening' : 'Start Voice Input') : 'Voice input not supported'">
-            🎤
-          </button>
-          <button @click="sendMessage" :disabled="isAnyActionActive || currentUserMessage.trim() === ''">Send</button>
-          <button @click="toggleTts" 
-                  :class="['tts-button', { 'is-enabled': isTtsEnabled, 'not-supported': !ttsSupported }]"
-                  :disabled="!ttsSupported"
-                  :title="ttsSupported ? (isTtsEnabled ? 'Mute AI Responses' : 'Speak AI Responses') : 'Voice output not supported'">
-            {{ isTtsEnabled ? '🔇' : '🔊' }}
-          </button>
+      </van-tab>
+      <van-tab name="3d-space" title="3D Space & Actions">
+        <div class="tab-content-placeholder space-and-actions-tab">
+          <div ref="sceneContainerMobile" class="scene-container-mobile" :class="{'hidden-until-selected': !selectedPetData}">
+             <div v-if="!selectedPetData" class="select-pet-prompt">Select a pet to view in 3D.</div>
+             <div v-if="isModelLoading && selectedPetData" class="model-loading-indicator">Loading Image...</div>
+          </div>
+          <div v-if="selectedPetData" class="mobile-pet-dashboard">
+            <van-card
+              :title="selectedPetData.displayName"
+              :desc="`Level: ${selectedPetData.level} | Rarity: ${selectedPetData.fullNftData?.metadata.rarity}`"
+              class="pet-info-card"
+            >
+              <template #tags>
+                <van-tag plain type="primary">{{ selectedPetData.modelType }}</van-tag>
+                <van-tag plain :color="selectedPetData.color" :style="{ color: getContrastingTextColor(selectedPetData.color), marginLeft: '5px' }">{{ selectedPetData.color }}</van-tag>
+              </template>
+            </van-card>
+            <div class="pet-actions-group-vant">
+              <van-button icon="gift-o" @click="feedPet" :disabled="isAnyActionActive" size="small" type="success">Feed</van-button>
+              <van-button icon="smile-o" @click="triggerHappyEmote" :disabled="isAnyActionActive" size="small" type="primary">Happy</van-button>
+              <van-button icon="replay" @click="triggerSpinEmote" :disabled="isAnyActionActive" size="small" type="primary">Spin</van-button>
+              <van-button icon="passed" @click="triggerWiggleEmote" :disabled="isAnyActionActive" size="small" type="primary">Wiggle</van-button>
+            </div>
+          </div>
         </div>
-         <div v-if="!speechApiSupported || !ttsSupported" class="speech-support-notice">
-            <span v-if="!speechApiSupported">Voice input (Speech Recognition) not supported. </span>
-            <span v-if="!ttsSupported">Voice output (Text-to-Speech) not supported.</span>
+      </van-tab>
+      <van-tab name="chat" title="Chat">
+        <div class="tab-content-placeholder chat-tab-content">
+          <div v-if="selectedPetData" class="chat-interface-container mobile-chat-full-height">
+            <div class="chat-messages-area" ref="chatMessagesArea">
+              <div v-for="(message, index) in chatMessages" :key="index" 
+                   :class="['chat-message', message.sender === 'user' ? 'user-message' : 'pet-message', message.sender === 'system' ? 'system-message' : '']">
+                <span class="message-sender">
+                  {{ message.sender === 'user' ? 'You' : (message.sender === 'pet' ? selectedPetData.displayName : 'System') }}:
+                </span>
+                <span class="message-text" v-html="message.text"></span>
+                <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+              </div>
+              <div v-if="isPetTyping" class="chat-message pet-message typing-indicator">
+                <span class="message-sender">{{ selectedPetData.displayName }}: </span>
+                <span class="message-text">
+                  <i>typing<span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span></i>
+                </span>
+              </div>
+            </div>
+            <div class="chat-input-area vant-chat-input">
+              <van-field
+                v-model="currentUserMessage"
+                @keyup.enter="sendMessage"
+                placeholder="Type your message..."
+                :disabled="isAnyActionActive"
+                clearable
+                rows="1"
+                autosize
+                class="chat-input-field"
+              />
+              <van-button 
+                icon="microphone" 
+                @click="toggleVoiceListening" 
+                :disabled="!speechApiSupported || isAnyActionActiveButVoice" 
+                :type="isListening ? 'danger' : 'default'" 
+                size="small" 
+                class="chat-control-button"
+                title="Voice Input"
+              />
+              <van-button 
+                type="primary" 
+                @click="sendMessage" 
+                :disabled="isAnyActionActive || currentUserMessage.trim() === ''" 
+                size="small" 
+                class="chat-control-button send-button"
+                title="Send Message"
+              >Send</van-button>
+              <van-button 
+                :icon="isTtsEnabled ? 'volume' : 'volume-o'" 
+                @click="toggleTts" 
+                :disabled="!ttsSupported" 
+                size="small" 
+                class="chat-control-button"
+                :type="isTtsEnabled ? 'success' : 'default'"
+                title="Toggle Text-to-Speech"
+              />
+            </div>
+            <div v-if="!speechApiSupported || !ttsSupported" class="speech-support-notice">
+              <span v-if="!speechApiSupported">Voice input not supported. </span>
+              <span v-if="!ttsSupported">Voice output not supported.</span>
+            </div>
+          </div>
+          <div v-else class="select-pet-prompt">Select a pet to chat.</div>
         </div>
-      </div>
-      <div v-else-if="isLoadingPetData || isLoadingNFTList || isModelLoading">
-        <p>Loading...</p>
-      </div>
-      <div v-else>
-        <p>Select a pet from the list to see its details and chat. The 3D model will update in the center panel.</p>
-      </div>
-    </div>
+      </van-tab>
+    </van-tabs>
+
+    <!-- Desktop Layout: 3 Columns -->
+    <van-row v-else gutter="16" class="desktop-layout-container">
+      <van-col span="6" class="column-desktop nft-list-col-desktop">
+        <div class="nft-list-container">
+          <h2>My 3D Pets</h2>
+          <van-loading v-if="isLoadingNFTList" type="spinner" vertical class="list-loading">Loading pets...</van-loading>
+          <van-list v-else-if="userNFTs.length > 0" class="nft-vant-list">
+             <van-cell 
+              v-for="nft in userNFTs" 
+              :key="nft.id" 
+              :title="nft.name" 
+              :label="`Rarity: ${nft.metadata.rarity} | Level: ${nft.metadata.level}`" 
+              is-link 
+              @click="selectNFT(nft)"
+              :class="{ 'selected-nft-vant': selectedNftId === nft.id }"
+            />
+          </van-list>
+          <div v-else class="empty-state-pets">
+            <van-empty description="No pets found." />
+          </div>
+        </div>
+      </van-col>
+      <van-col span="10" class="column-desktop scene-col-desktop">
+        <div ref="sceneContainerDesktop" class="scene-container-desktop" :class="{'hidden-until-selected': !selectedPetData}">
+            <div v-if="!selectedPetData" class="select-pet-prompt-desktop">Select a pet from the list to view it in 3D and interact.</div>
+            <div v-if="isModelLoading && selectedPetData" class="model-loading-indicator">Loading Image...</div>
+        </div>
+        <div v-if="selectedPetData" class="desktop-pet-dashboard">
+            <van-card
+              :title="selectedPetData.displayName"
+              :desc="`Level: ${selectedPetData.level} | Rarity: ${selectedPetData.fullNftData?.metadata.rarity}`"
+              class="pet-info-card"
+            >
+              <template #tags>
+                <van-tag plain type="primary">{{ selectedPetData.modelType }}</van-tag>
+                <van-tag plain :color="selectedPetData.color" :style="{ color: getContrastingTextColor(selectedPetData.color), marginLeft: '5px' }">{{ selectedPetData.color }}</van-tag>
+              </template>
+            </van-card>
+            <div class="pet-actions-group-vant">
+              <van-button icon="gift-o" @click="feedPet" :disabled="isAnyActionActive" size="small" type="success">Feed</van-button>
+              <van-button icon="smile-o" @click="triggerHappyEmote" :disabled="isAnyActionActive" size="small" type="primary">Happy</van-button>
+              <van-button icon="replay" @click="triggerSpinEmote" :disabled="isAnyActionActive" size="small" type="primary">Spin</van-button>
+              <van-button icon="passed" @click="triggerWiggleEmote" :disabled="isAnyActionActive" size="small" type="primary">Wiggle</van-button>
+            </div>
+        </div>
+      </van-col>
+      <van-col span="8" class="column-desktop chat-col-desktop">
+        <div v-if="selectedPetData" class="chat-interface-container desktop-chat-full-height">
+            <div class="chat-messages-area" ref="chatMessagesArea">
+              <div v-for="(message, index) in chatMessages" :key="index" 
+                   :class="['chat-message', message.sender === 'user' ? 'user-message' : 'pet-message', message.sender === 'system' ? 'system-message' : '']">
+                <span class="message-sender">
+                  {{ message.sender === 'user' ? 'You' : (message.sender === 'pet' ? selectedPetData.displayName : 'System') }}:
+                </span>
+                <span class="message-text" v-html="message.text"></span>
+                <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+              </div>
+              <div v-if="isPetTyping" class="chat-message pet-message typing-indicator">
+                <span class="message-sender">{{ selectedPetData.displayName }}: </span>
+                <span class="message-text">
+                  <i>typing<span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span><span class="ellipsis-dot">.</span></i>
+                </span>
+              </div>
+            </div>
+            <div class="chat-input-area vant-chat-input">
+              <van-field
+                v-model="currentUserMessage"
+                @keyup.enter="sendMessage"
+                placeholder="Type your message..."
+                :disabled="isAnyActionActive"
+                clearable
+                rows="1"
+                autosize
+                class="chat-input-field"
+              />
+              <van-button 
+                icon="microphone" 
+                @click="toggleVoiceListening" 
+                :disabled="!speechApiSupported || isAnyActionActiveButVoice" 
+                :type="isListening ? 'danger' : 'default'" 
+                size="small" 
+                class="chat-control-button"
+                title="Voice Input"
+              />
+              <van-button 
+                type="primary" 
+                @click="sendMessage" 
+                :disabled="isAnyActionActive || currentUserMessage.trim() === ''" 
+                size="small" 
+                class="chat-control-button send-button"
+                title="Send Message"
+              >Send</van-button>
+              <van-button 
+                :icon="isTtsEnabled ? 'volume' : 'volume-o'" 
+                @click="toggleTts" 
+                :disabled="!ttsSupported" 
+                size="small" 
+                class="chat-control-button"
+                :type="isTtsEnabled ? 'success' : 'default'"
+                title="Toggle Text-to-Speech"
+              />
+            </div>
+            <div v-if="!speechApiSupported || !ttsSupported" class="speech-support-notice">
+              <span v-if="!speechApiSupported">Voice input not supported. </span>
+              <span v-if="!ttsSupported">Voice output not supported.</span>
+            </div>
+        </div>
+        <div v-else class="select-pet-prompt-desktop">Select a pet to chat with it.</div>
+      </van-col>
+    </van-row>
   </div>
 </template>
 
 <script setup>
-console.log('PetsView.vue: script setup started'); // Log 1
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// GLTFLoader removed
 import { fetchUserNFTs } from '../services/nftService.js';
-import { API_BASE_URL } from '../config.js'; // Import API_BASE_URL
+import { API_BASE_URL } from '../config.js';
 
-// --- Reactive State Declarations ---
+// Layout & UI State
+const isMobile = ref(window.innerWidth <= 768);
+const activeMobileTab = ref('my-pets'); 
+
+// NFT and Pet data state
 const userNFTs = ref([]); 
 const isLoadingNFTList = ref(true);
 const selectedNftId = ref(null); 
@@ -111,7 +247,10 @@ const selectedPetData = ref(null);
 const isLoadingPetData = ref(false); 
 const isModelLoading = ref(false);
 
-const sceneContainer = ref(null);
+// Three.js scene state
+const sceneContainerDesktop = ref(null); 
+const sceneContainerMobile = ref(null); 
+
 let renderer;
 let scene;
 let camera;
@@ -122,36 +261,31 @@ const modelOriginalScale = new THREE.Vector3();
 const modelOriginalPosition = new THREE.Vector3();
 const modelOriginalRotation = new THREE.Euler();
 
-let mixer = null; 
-let animationActions = {}; 
-let loadedGltfAnimations = [];
-
+// Interaction & Chat state
 const isPetActionInProgress = ref(false); 
-const chatMessages = ref([]);
-const currentUserMessage = ref('');
+const chatMessages = ref([]); 
+const currentUserMessage = ref(''); 
 const chatMessagesArea = ref(null); 
 const isPetTyping = ref(false); 
 
+// Voice Input & Output State
 const speechApiSupported = ref(true);
 const isListening = ref(false);
 let recognition = null; 
-
 const ttsSupported = ref(true);
 const isTtsEnabled = ref(false);
 let synth = null; 
 
-const gltfLoader = new GLTFLoader();
+const textureLoader = new THREE.TextureLoader(); 
 
+// Computed properties
 const isAnyActionActive = computed(() => {
   return isPetActionInProgress.value || isModelLoading.value || isPetTyping.value || isListening.value;
 });
-const isAnyActionActiveButVoice = computed(() => {
+const isAnyActionActiveButVoice = computed(() => { // Used to allow mic button when only listening is active
     return isPetActionInProgress.value || isModelLoading.value || isPetTyping.value;
 });
-
-const availableAnimations = computed(() => {
-  return selectedPetData.value?.fullNftData?.metadata?.animations || [];
-});
+// availableAnimations removed
 
 // --- Utility Functions ---
 const formatTimestamp = (timestamp) => { return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
@@ -161,23 +295,20 @@ watch(chatMessages, scrollToBottom, { deep: true });
 const resetPetActionFlag = () => { isPetActionInProgress.value = false; };
 const resetTypingFlag = () => { isPetTyping.value = false; }; 
 
-// --- Backend Interaction for Emotes/Actions ---
+// --- Responsive Handling ---
+const checkMobile = () => { isMobile.value = window.innerWidth <= 768; };
+
+// --- Backend Interactions ---
 const callEmoteBackend = async (emoteType) => {
   if (!selectedPetData.value) return;
   try {
-    const response = await fetch(`${API_BASE_URL}/pets/emote`, { // Use API_BASE_URL
+    const response = await fetch(`${API_BASE_URL}/pets/emote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: 'tempUser123', 
-        nftId: selectedPetData.value.id,
-        emoteType: emoteType,
-      }),
+      body: JSON.stringify({ userId: 'tempUser123', nftId: selectedPetData.value.id, emoteType: emoteType }),
     });
     const emoteResponseData = await response.json();
-    if (!response.ok) {
-      throw new Error(emoteResponseData.statusMessage || `Emote backend error: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(emoteResponseData.statusMessage || `Emote backend error: ${response.status}`);
     console.log('Emote backend response:', emoteResponseData.statusMessage);
   } catch (error) {
     console.error(`Error calling /emote backend for ${emoteType}:`, error);
@@ -190,48 +321,87 @@ const feedPet = async () => {
   if (!currentPetModel || !selectedPetData.value || isAnyActionActive.value) return;
   isPetActionInProgress.value = true;
   modelOriginalScale.copy(currentPetModel.scale);
-  const targetScale = modelOriginalScale.clone().multiplyScalar(1.3);
+  const targetScale = modelOriginalScale.clone().multiplyScalar(1.2);
   currentPetModel.scale.copy(targetScale);
   chatMessages.value.push({ sender: 'system', text: `Feeding ${selectedPetData.value.displayName}...`, timestamp: new Date() });
   try {
-    const response = await fetch(`${API_BASE_URL}/pets/feed`, { // Use API_BASE_URL
+    const response = await fetch(`${API_BASE_URL}/pets/feed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'tempUser123', nftId: selectedPetData.value.id }),
     });
     const feedResponseData = await response.json();
-    if (!response.ok) throw new Error(feedResponseData.statusMessage || `HTTP error! status: ${response.status}`);
+    if (!response.ok) throw new Error(feedResponseData.statusMessage || `HTTP error!`);
     chatMessages.value.push({ sender: 'system', text: `${feedResponseData.statusMessage}<br>Pet says: Yummy! That was tasty!`, timestamp: new Date() });
+    speakText("Yummy! That was tasty!");
   } catch (error) { 
     console.error('Failed to feed pet via backend:', error);
-    chatMessages.value.push({ sender: 'system', text: `Failed to feed ${selectedPetData.value.displayName}. Error: ${error.message}`, timestamp: new Date() });
-    chatMessages.value.push({ sender: 'pet', text: 'Oh no, something went wrong with my snack!', timestamp: new Date() });
+    const errorText = `Failed to feed ${selectedPetData.value.displayName}. Error: ${error.message}`;
+    chatMessages.value.push({ sender: 'system', text: errorText, timestamp: new Date() });
+    speakText(errorText);
   } 
   finally {
-    setTimeout(() => { if(currentPetModel) currentPetModel.scale.copy(modelOriginalScale); resetPetActionFlag(); }, 600);
+    setTimeout(() => { if(currentPetModel) currentPetModel.scale.copy(modelOriginalScale); resetPetActionFlag(); }, 500);
     scrollToBottom();
   }
 };
-
-const triggerHappyEmote = () => { /* ... (unchanged, callEmoteBackend uses API_BASE_URL) ... */ };
-const triggerSpinEmote = () => { /* ... (unchanged, callEmoteBackend uses API_BASE_URL) ... */ };
-const triggerWiggleEmote = () => { /* ... (unchanged, callEmoteBackend uses API_BASE_URL) ... */ };
-
-// --- Animation Player ---
-const playAnimation = (animationName) => { /* ... (unchanged, callEmoteBackend uses API_BASE_URL) ... */ };
+const triggerHappyEmote = () => {
+  if (!currentPetModel || isAnyActionActive.value) return;
+  isPetActionInProgress.value = true;
+  modelOriginalPosition.copy(currentPetModel.position);
+  currentPetModel.position.y += 0.3; 
+  const petText = 'Whee! I\'m happy!';
+  chatMessages.value.push({ sender: 'pet', text: petText, timestamp: new Date() }); speakText(petText);
+  callEmoteBackend("Happy");
+  setTimeout(() => { if(currentPetModel) currentPetModel.position.copy(modelOriginalPosition); resetPetActionFlag(); }, 300);
+};
+const triggerSpinEmote = () => {
+   if (!currentPetModel || isAnyActionActive.value) return;
+  isPetActionInProgress.value = true;
+  modelOriginalRotation.copy(currentPetModel.rotation);
+  const petText = 'Look at me, I\'m spinning!';
+  chatMessages.value.push({ sender: 'pet', text: petText, timestamp: new Date() }); speakText(petText);
+  callEmoteBackend("Spin");
+  const targetRotationY = currentPetModel.rotation.y + Math.PI * 2;
+  const initialRotationY = currentPetModel.rotation.y;
+  const duration = 500; let startTime = null;
+  function animateSpin(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const progress = Math.min((timestamp - startTime) / duration, 1);
+    currentPetModel.rotation.y = initialRotationY + (targetRotationY - initialRotationY) * progress;
+    if (progress < 1) requestAnimationFrame(animateSpin);
+    else { currentPetModel.rotation.copy(modelOriginalRotation); resetPetActionFlag(); }
+  }
+  requestAnimationFrame(animateSpin);
+};
+const triggerWiggleEmote = () => {
+   if (!currentPetModel || isAnyActionActive.value) return;
+  isPetActionInProgress.value = true;
+  modelOriginalRotation.copy(currentPetModel.rotation);
+  const petText = 'Wiggle wiggle!';
+  chatMessages.value.push({ sender: 'pet', text: petText, timestamp: new Date() }); speakText(petText);
+  callEmoteBackend("Wiggle");
+  const wiggleAmount = 0.3; const wiggleDuration = 100; 
+  currentPetModel.rotation.z += wiggleAmount;
+  setTimeout(() => { if(currentPetModel) currentPetModel.rotation.z -= wiggleAmount * 2;
+    setTimeout(() => { if(currentPetModel) currentPetModel.rotation.z += wiggleAmount; 
+       setTimeout(() => { if(currentPetModel) currentPetModel.rotation.copy(modelOriginalRotation); resetPetActionFlag(); }, wiggleDuration);
+    }, wiggleDuration);
+  }, wiggleDuration); 
+};
+// playAnimation removed
 
 // --- Chat Logic ---
 const sendMessage = async () => {
-  if (currentUserMessage.value.trim() === '' || isPetTyping.value || isPetActionInProgress.value || isModelLoading.value) return;
+  if (currentUserMessage.value.trim() === '' || isAnyActionActive.value) return; // isAnyActionActive covers all loading/action states
   const userMessageText = currentUserMessage.value;
   chatMessages.value.push({ sender: 'user', text: userMessageText, timestamp: new Date() });
   currentUserMessage.value = ''; 
   isPetTyping.value = true; 
 
   try {
-    const response = await fetch(`${API_BASE_URL}/pets/chat`, { // Use API_BASE_URL
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch(`${API_BASE_URL}/pets/chat`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'tempUser', message: userMessageText }),
     });
     const backendResponse = await response.json(); 
@@ -251,20 +421,65 @@ const sendMessage = async () => {
 };
 
 // --- Voice Input Logic ---
-const toggleVoiceListening = () => { /* ... (unchanged) ... */ };
-const setupSpeechRecognition = () => { /* ... (unchanged) ... */ };
+const toggleVoiceListening = () => {
+  if (!speechApiSupported.value || isAnyActionActiveButVoice.value) return;
+  if (isListening.value) recognition.stop();
+  else {
+    try { recognition.start(); isListening.value = true; } 
+    catch (e) { console.error("Error starting speech recognition:", e); chatMessages.value.push({ sender: 'system', text: 'Voice recognition error.', timestamp: new Date() });}
+  }
+};
+const setupSpeechRecognition = () => {
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognitionAPI) {
+    recognition = new SpeechRecognitionAPI();
+    recognition.continuous = false; recognition.lang = 'en-US'; recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      currentUserMessage.value = transcript;
+      if (transcript.trim()) sendMessage();
+    };
+    recognition.onerror = (event) => {
+      console.error("Speech error:", event.error);
+      let msg = "Voice error.";
+      if (event.error === 'no-speech') msg = "No speech detected.";
+      else if (event.error === 'audio-capture') msg = "Mic problem.";
+      else if (event.error === 'not-allowed') msg = "Mic access denied.";
+      chatMessages.value.push({ sender: 'system', text: msg, timestamp: new Date() });
+      isListening.value = false;
+    };
+    recognition.onend = () => { isListening.value = false; };
+  } else speechApiSupported.value = false;
+};
+
 // --- Voice Output (TTS) Logic ---
-const speakText = (text) => { /* ... (unchanged) ... */ };
-const toggleTts = () => { /* ... (unchanged) ... */ };
-const setupSpeechSynthesis = () => { /* ... (unchanged) ... */ };
+const speakText = (text) => {
+  if (!isTtsEnabled.value || !ttsSupported.value || !synth || !text) return;
+  if (synth.speaking) synth.cancel(); 
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US'; 
+  utterance.onerror = (event) => { console.error('TTS error', event); chatMessages.value.push({ sender: 'system', text: `Speech error: ${event.error}`, timestamp: new Date()}); };
+  synth.speak(utterance);
+};
+const toggleTts = () => {
+  isTtsEnabled.value = !isTtsEnabled.value;
+  if (!isTtsEnabled.value && synth && synth.speaking) synth.cancel();
+  const status = isTtsEnabled.value ? "enabled" : "disabled";
+  chatMessages.value.push({ sender: 'system', text: `Voice output ${status}.`, timestamp: new Date() });
+  speakText(`Voice output ${status}.`);
+};
+const setupSpeechSynthesis = () => {
+  if ('speechSynthesis' in window) synth = window.speechSynthesis;
+  else ttsSupported.value = false;
+};
+
 // --- Three.js Model Update Logic ---
-const removeCurrentPetModel = () => { /* ... (unchanged) ... */ };
-const updatePetModelDisplay = (petDisplayData) => { /* ... (unchanged) ... */ };
+const removeCurrentPetModel = () => { /* ... (unchanged, uses currentPetModel) ... */ };
+const updatePetModelDisplay = (petDisplayData) => { /* ... (unchanged, uses textureLoader, currentPetModel) ... */ };
 
 // --- NFT Selection & Data Handling ---
 const selectNFT = async (nft) => { 
-  if (isLoadingPetData.value || isAnyActionActive.value) { /* ... */ return; }
-  
+  if (isLoadingPetData.value || isAnyActionActive.value) return;
   selectedNftId.value = nft.id; 
   isLoadingPetData.value = true; 
   selectedPetData.value = null; 
@@ -272,22 +487,25 @@ const selectNFT = async (nft) => {
   if (synth && synth.speaking) synth.cancel();
 
   try {
-    const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`, { // Use API_BASE_URL
-       // Assuming nft.id maps to the simple ID the backend expects for this endpoint
-    });
+    const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`);
     if (!displayDataResponse.ok) throw new Error(`HTTP error! status: ${displayDataResponse.status}`);
     const backendDisplayProfile = await displayDataResponse.json();
-
-    const petDisplayProfile = { 
+    selectedPetData.value = { 
       id: nft.id, displayName: nft.name,
       modelType: backendDisplayProfile.modelType, color: backendDisplayProfile.color,
       level: nft.metadata.level, fullNftData: nft,
     };
-    selectedPetData.value = petDisplayProfile;
-    updatePetModelDisplay(petDisplayProfile); 
-
+    await nextTick(); 
+    const currentContainer = isMobile.value ? sceneContainerMobile.value : sceneContainerDesktop.value;
+    if (currentContainer && scene) updatePetModelDisplay(selectedPetData.value); 
+    else if (currentContainer && !scene) {
+        cleanupThreeSceneFunc = setupThreeScene(currentContainer);
+        updatePetModelDisplay(selectedPetData.value);
+    }
+    if (isMobile.value) activeMobileTab.value = '3d-space';
+    
     isPetTyping.value = true; 
-    const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, { // Use API_BASE_URL
+    const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: 'tempUser', message: `Hello, I'm ${selectedPetData.value.displayName}` })
     });
@@ -298,13 +516,10 @@ const selectNFT = async (nft) => {
     speakText(greetingText);
 
   } catch (error) {
-    console.error('Failed to select NFT or get initial greeting:', error);
+    console.error('Failed to select NFT:', error);
     const errorText = error.message || "Sorry, I had trouble getting ready.";
-    const errorDisplayData = { displayName: nft.name || "Unknown (Error)", modelType: 'default', color: '#FF0000', fullNftData: nft };
-     selectedPetData.value = {
-        id: nft.id, displayName: nft.name || "Unknown (Error)",
-        modelType: 'default', color: '#FF0000', level: 0, fullNftData: nft,
-    };
+    const errorDisplayData = { displayName: nft.name || "Error", modelType: 'default', color: '#FF0000', fullNftData: nft };
+     selectedPetData.value = { id: nft.id, displayName: nft.name || "Error", modelType: 'default', color: '#FF0000', level: 0, fullNftData: nft };
     updatePetModelDisplay(errorDisplayData);
     chatMessages.value.push({ sender: 'pet', text: errorText, timestamp: new Date() });
     speakText(errorText);
@@ -316,47 +531,152 @@ const selectNFT = async (nft) => {
 };
 
 // --- Three.js Scene Setup ---
-const setupThreeScene = (container) => { /* ... (unchanged) ... */ };
-// --- Lifecycle Hooks ---
-let cleanupThreeScene = () => {};
-onMounted(async () => { 
-  console.log('PetsView.vue: onMounted hook started'); // Log 2
-  isLoadingNFTList.value = true;
-  try {
-    console.log('PetsView.vue: About to call fetchUserNFTs'); // Log 3
-    const nfts = await fetchUserNFTs('currentUser123'); // Fetch NFTs from service
-    console.log('PetsView.vue: Data received from fetchUserNFTs:', JSON.parse(JSON.stringify(nfts))); // Log 4
-    userNFTs.value = nfts;
-    console.log('PetsView.vue: userNFTs.value after assignment:', JSON.parse(JSON.stringify(userNFTs.value))); // Log 6
-  } catch (error) {
-    console.error("PetsView.vue: CRITICAL - Failed to fetch user NFTs in onMounted:", error); // Log 5
-    userNFTs.value = []; // Set to empty on error
-  } finally {
-    isLoadingNFTList.value = false;
-  }
+let sceneInitialized = false;
+let cleanupThreeSceneFunc = () => {};
+const setupThreeScene = (containerElement) => { /* ... (unchanged) ... */ };
 
+// --- Lifecycle Hooks ---
+onMounted(async () => { 
+  isLoadingNFTList.value = true;
+  try { userNFTs.value = await fetchUserNFTs('currentUser123'); } 
+  catch (error) { console.error("PetsView.vue: CRITICAL - Failed to fetch user NFTs:", error); userNFTs.value = []; } 
+  finally { isLoadingNFTList.value = false; }
+  window.addEventListener('resize', checkMobile);
+  checkMobile(); 
   await nextTick();
-  if (sceneContainer.value) { cleanupThreeScene = setupThreeScene(sceneContainer.value); } 
-  else { console.error("Scene container not found on mount."); }
-  console.log('PetsView.vue: onMounted hook finished'); // Log 7
+  const initialContainer = isMobile.value ? sceneContainerMobile.value : sceneContainerDesktop.value;
+  if (initialContainer && (!isMobile.value || activeMobileTab.value === '3d-space')) { // Only init if desktop or mobile 3D tab active
+    cleanupThreeSceneFunc = setupThreeScene(initialContainer);
+  } else {
+    console.log("Initial scene setup deferred (mobile tab not 3d-space or container not ready).");
+  }
+  setupSpeechRecognition(); 
+  setupSpeechSynthesis(); 
 });
 onUnmounted(() => { 
-  if (recognition) { 
-    recognition.stop();
-    recognition.onresult = null;
-    recognition.onerror = null;
-    recognition.onend = null;
-    recognition = null;
-   } 
-  if (synth && synth.speaking) { // Stop any TTS on unmount
-    synth.cancel();
-  }
-  cleanupThreeScene(); 
+  window.removeEventListener('resize', checkMobile);
+  cleanupThreeSceneFunc(); 
+  if (recognition) { recognition.stop(); recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition = null; }
+  if (synth && synth.speaking) synth.cancel();
 });
 
-// --- (Full script content from previous turns assumed for context) ---
+const onMobileTabChange = async (tabName) => { /* ... (unchanged) ... */ };
+watch(isMobile, async (newIsMobile) => { /* ... (unchanged) ... */ });
+const getContrastingTextColor = (hexColor) => { /* ... (unchanged) ... */ };
+
 </script>
 
 <style scoped>
-/* ... (All existing styles from previous turns are assumed here) ... */
+.pets-view-page-container { /* ... */ }
+.nft-list-container h2, .column-desktop h2 { /* ... */ }
+.mobile-list-container { /* ... */ }
+.list-loading { /* ... */ }
+.nft-vant-list .van-cell { /* ... */ }
+.nft-vant-list .van-cell__title { /* ... */ }
+.nft-vant-list .van-cell__label { /* ... */ }
+.selected-nft-vant { /* ... */ }
+.selected-nft-vant .van-cell__title,
+.selected-nft-vant .van-cell__label,
+.selected-nft-vant .van-cell__value { /* ... */ }
+.empty-state-pets { /* ... */ }
+.empty-state-pets .van-empty__description { /* ... */ }
+.desktop-layout-container { /* ... */ }
+.column-desktop { /* ... */ }
+.scene-col-desktop { /* ... */ }
+.scene-container-desktop, .scene-container-mobile { /* ... */ }
+.select-pet-prompt, .select-pet-prompt-desktop { /* ... */ }
+.model-loading-indicator { /* ... */ }
+.tab-content-placeholder { /* ... */ }
+.space-and-actions-tab { justify-content: flex-start; /* Align items to top */ }
+.chat-tab-content { padding: 0; height: 100%; /* Allow chat to fill tab */ }
+.mobile-pet-dashboard, .desktop-pet-dashboard { /* ... */ }
+.mobile-pet-dashboard h3, .desktop-pet-dashboard h3 { /* ... */ }
+.pet-info-card { /* ... */ }
+.pet-actions-group-vant { /* ... */ }
+.pet-actions-group-vant .van-button { /* ... */ }
+
+/* Chat Interface Specific Styles */
+.chat-interface-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%; /* Ensure it fills its parent column/tab */
+  background-color: #fff;
+}
+.mobile-chat-full-height {
+    height: calc(100vh - 64px - 20px - 44px - 44px); /* Full viewport - navbar - page padding - tabs header - tab content padding */
+}
+.desktop-chat-full-height {
+    height: 100%;
+}
+
+.chat-messages-area { 
+  flex-grow: 1; 
+  overflow-y: auto; 
+  padding: 15px; 
+  background-color: var(--van-background-2, #f7f8fa); 
+}
+.chat-message { /* ... (existing message styles) ... */ }
+.user-message { /* ... */ }
+.pet-message { /* ... */ }
+.system-message { /* ... */ }
+.typing-indicator .message-text i { /* ... */ }
+.ellipsis-dot { /* ... */ }
+@keyframes ellipsis-blink { /* ... */ }
+.message-sender { /* ... */ }
+.message-text { /* ... */ }
+.message-timestamp { /* ... */ }
+.user-message .message-timestamp { /* ... */ }
+.system-message .message-timestamp { /* ... */ }
+
+.vant-chat-input {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  background-color: var(--van-background, #fff);
+  border-top: 1px solid var(--van-border-color, #ebedf0);
+}
+.chat-input-field {
+  flex-grow: 1;
+  margin-right: 8px;
+  border: none; /* Vant field is already styled */
+  background-color: var(--van-field-input-background-color, #f7f8fa); /* Match Vant field style */
+  border-radius: 20px; /* Match Vant field style if desired */
+}
+.chat-input-field :deep(.van-field__control) {
+    padding: 0 10px; /* Adjust padding inside field if needed */
+}
+
+.chat-control-button {
+  margin-left: 5px;
+  flex-shrink: 0; /* Prevent buttons from shrinking */
+}
+.send-button {
+  /* Specific style for send if needed */
+}
+.mic-button { /* Updated for Vant button */
+  /* icon prop handles the icon, type handles color */
+}
+.mic-button.is-listening {
+  /* Vant button type="danger" handles red background */
+  animation: pulse-mic 1.5s infinite; /* Keep pulse */
+}
+.tts-button { /* Updated for Vant button */
+  /* icon prop handles the icon, type handles color */
+}
+.tts-button.is-enabled {
+  /* Vant button type="success" for green */
+}
+
+.speech-support-notice { 
+  font-size: 0.8em; color: #777; text-align: center; padding: 5px 10px; 
+  background-color: var(--van-background, #fff);
+}
+
+/* Ensure Vant tabs fill height if possible, or page container scrolls */
+:deep(.van-tabs__content) { 
+    height: 100%; /* Try to make content take full height */
+}
+:deep(.van-tab__panel) {
+    height: 100%; /* Try to make panel take full height */
+}
 </style>
