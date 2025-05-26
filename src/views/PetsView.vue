@@ -117,7 +117,7 @@
 
     <!-- Desktop Layout: 3 Columns -->
     <van-row v-else gutter="16" class="desktop-layout-container">
-      <van-col span="6" class="column-desktop nft-list-col-desktop">
+      <van-col :span="6" class="column-desktop nft-list-col-desktop">
         <div class="nft-list-container">
           <h2>My 3D Pets</h2>
           <van-loading v-if="isLoadingNFTList" type="spinner" vertical class="list-loading">Loading pets...</van-loading>
@@ -137,7 +137,7 @@
           </div>
         </div>
       </van-col>
-      <van-col span="10" class="column-desktop scene-col-desktop">
+      <van-col :span="10" class="column-desktop scene-col-desktop">
         <div ref="sceneContainerDesktop" class="scene-container-desktop" :class="{'hidden-until-selected': !selectedPetData}">
             <div v-if="!selectedPetData" class="select-pet-prompt-desktop">Select a pet from the list to view it in 3D and interact.</div>
             <div v-if="isModelLoading && selectedPetData" class="model-loading-indicator">Loading Image...</div>
@@ -161,7 +161,7 @@
             </div>
         </div>
       </van-col>
-      <van-col span="8" class="column-desktop chat-col-desktop">
+      <van-col :span="8" class="column-desktop chat-col-desktop">
         <div v-if="selectedPetData" class="chat-interface-container desktop-chat-full-height">
             <div class="chat-messages-area" ref="chatMessagesArea">
               <div v-for="(message, index) in chatMessages" :key="index" 
@@ -231,9 +231,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import * as THREE from 'three';
-// GLTFLoader removed
 import { fetchUserNFTs } from '../services/nftService.js';
 import { API_BASE_URL } from '../config.js';
+
+console.log('PetsView.vue: script setup started');
 
 // Layout & UI State
 const isMobile = ref(window.innerWidth <= 768);
@@ -254,12 +255,13 @@ const sceneContainerMobile = ref(null);
 let renderer;
 let scene;
 let camera;
-let clock; 
+let clock;
 let currentPetModel = null; 
 let animationFrameId;
 const modelOriginalScale = new THREE.Vector3(); 
 const modelOriginalPosition = new THREE.Vector3();
 const modelOriginalRotation = new THREE.Euler();
+const textureLoader = new THREE.TextureLoader(); 
 
 // Interaction & Chat state
 const isPetActionInProgress = ref(false); 
@@ -276,31 +278,48 @@ const ttsSupported = ref(true);
 const isTtsEnabled = ref(false);
 let synth = null; 
 
-const textureLoader = new THREE.TextureLoader(); 
-
 // Computed properties
 const isAnyActionActive = computed(() => {
   return isPetActionInProgress.value || isModelLoading.value || isPetTyping.value || isListening.value;
 });
-const isAnyActionActiveButVoice = computed(() => { // Used to allow mic button when only listening is active
+const isAnyActionActiveButVoice = computed(() => { 
     return isPetActionInProgress.value || isModelLoading.value || isPetTyping.value;
 });
-// availableAnimations removed
 
 // --- Utility Functions ---
-const formatTimestamp = (timestamp) => { return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+const formatTimestamp = (timestamp) => {
+  if (!timestamp || !(timestamp instanceof Date)) return '';
+  return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 const scrollToBottom = () => { nextTick(() => { if (chatMessagesArea.value) chatMessagesArea.value.scrollTop = chatMessagesArea.value.scrollHeight; }); };
 watch(chatMessages, scrollToBottom, { deep: true });
 
 const resetPetActionFlag = () => { isPetActionInProgress.value = false; };
 const resetTypingFlag = () => { isPetTyping.value = false; }; 
 
+const getContrastingTextColor = (hexColor) => {
+  if (!hexColor || !hexColor.startsWith('#')) return '#000000';
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? '#000000' : '#FFFFFF';
+};
+
 // --- Responsive Handling ---
-const checkMobile = () => { isMobile.value = window.innerWidth <= 768; };
+const checkMobile = () => { 
+  console.log('checkMobile: window.innerWidth', window.innerWidth);
+  isMobile.value = window.innerWidth <= 768;
+  console.log('checkMobile: isMobile.value set to', isMobile.value);
+};
 
 // --- Backend Interactions ---
 const callEmoteBackend = async (emoteType) => {
-  if (!selectedPetData.value) return;
+  if (!selectedPetData.value) {
+    console.log(`callEmoteBackend: No selectedPetData, exiting for ${emoteType}.`);
+    return;
+  }
+  console.log(`callEmoteBackend: Called for ${emoteType} with NFT ID ${selectedPetData.value.id}`);
   try {
     const response = await fetch(`${API_BASE_URL}/pets/emote`, {
       method: 'POST',
@@ -318,7 +337,11 @@ const callEmoteBackend = async (emoteType) => {
 
 // --- Pet Actions & Emotes ---
 const feedPet = async () => {
-  if (!currentPetModel || !selectedPetData.value || isAnyActionActive.value) return;
+  console.log('ACTION_BUTTON: feedPet called. isAnyActionActive:', isAnyActionActive.value, 'selectedPetData:', !!selectedPetData.value, 'currentPetModel:', !!currentPetModel);
+  if (!currentPetModel || !selectedPetData.value || isAnyActionActive.value) {
+    console.warn('feedPet: Action prevented. Conditions not met.');
+    return;
+  }
   isPetActionInProgress.value = true;
   modelOriginalScale.copy(currentPetModel.scale);
   const targetScale = modelOriginalScale.clone().multiplyScalar(1.2);
@@ -332,7 +355,8 @@ const feedPet = async () => {
     });
     const feedResponseData = await response.json();
     if (!response.ok) throw new Error(feedResponseData.statusMessage || `HTTP error!`);
-    chatMessages.value.push({ sender: 'system', text: `${feedResponseData.statusMessage}<br>Pet says: Yummy! That was tasty!`, timestamp: new Date() });
+    const successMsg = `${feedResponseData.statusMessage}<br>Pet says: Yummy! That was tasty!`;
+    chatMessages.value.push({ sender: 'system', text: successMsg, timestamp: new Date() });
     speakText("Yummy! That was tasty!");
   } catch (error) { 
     console.error('Failed to feed pet via backend:', error);
@@ -345,8 +369,13 @@ const feedPet = async () => {
     scrollToBottom();
   }
 };
+
 const triggerHappyEmote = () => {
-  if (!currentPetModel || isAnyActionActive.value) return;
+  console.log('ACTION_BUTTON: triggerHappyEmote called. isAnyActionActive:', isAnyActionActive.value, 'selectedPetData:', !!selectedPetData.value, 'currentPetModel:', !!currentPetModel);
+  if (!currentPetModel || isAnyActionActive.value) {
+    console.warn('triggerHappyEmote: Action prevented. Conditions not met.');
+     return;
+  }
   isPetActionInProgress.value = true;
   modelOriginalPosition.copy(currentPetModel.position);
   currentPetModel.position.y += 0.3; 
@@ -355,8 +384,13 @@ const triggerHappyEmote = () => {
   callEmoteBackend("Happy");
   setTimeout(() => { if(currentPetModel) currentPetModel.position.copy(modelOriginalPosition); resetPetActionFlag(); }, 300);
 };
+
 const triggerSpinEmote = () => {
-   if (!currentPetModel || isAnyActionActive.value) return;
+  console.log('ACTION_BUTTON: triggerSpinEmote called. isAnyActionActive:', isAnyActionActive.value, 'selectedPetData:', !!selectedPetData.value, 'currentPetModel:', !!currentPetModel);
+  if (!currentPetModel || isAnyActionActive.value) {
+    console.warn('triggerSpinEmote: Action prevented. Conditions not met.');
+    return;
+  }
   isPetActionInProgress.value = true;
   modelOriginalRotation.copy(currentPetModel.rotation);
   const petText = 'Look at me, I\'m spinning!';
@@ -366,16 +400,26 @@ const triggerSpinEmote = () => {
   const initialRotationY = currentPetModel.rotation.y;
   const duration = 500; let startTime = null;
   function animateSpin(timestamp) {
+    if (!currentPetModel) { resetPetActionFlag(); return; } 
     if (!startTime) startTime = timestamp;
     const progress = Math.min((timestamp - startTime) / duration, 1);
     currentPetModel.rotation.y = initialRotationY + (targetRotationY - initialRotationY) * progress;
-    if (progress < 1) requestAnimationFrame(animateSpin);
-    else { currentPetModel.rotation.copy(modelOriginalRotation); resetPetActionFlag(); }
+    if (progress < 1) {
+      requestAnimationFrame(animateSpin);
+    } else {
+      currentPetModel.rotation.copy(modelOriginalRotation);
+      resetPetActionFlag();
+    }
   }
   requestAnimationFrame(animateSpin);
 };
+
 const triggerWiggleEmote = () => {
-   if (!currentPetModel || isAnyActionActive.value) return;
+  console.log('ACTION_BUTTON: triggerWiggleEmote called. isAnyActionActive:', isAnyActionActive.value, 'selectedPetData:', !!selectedPetData.value, 'currentPetModel:', !!currentPetModel);
+  if (!currentPetModel || isAnyActionActive.value) {
+    console.warn('triggerWiggleEmote: Action prevented. Conditions not met.');
+    return;
+  }
   isPetActionInProgress.value = true;
   modelOriginalRotation.copy(currentPetModel.rotation);
   const petText = 'Wiggle wiggle!';
@@ -389,16 +433,14 @@ const triggerWiggleEmote = () => {
     }, wiggleDuration);
   }, wiggleDuration); 
 };
-// playAnimation removed
 
 // --- Chat Logic ---
 const sendMessage = async () => {
-  if (currentUserMessage.value.trim() === '' || isAnyActionActive.value) return; // isAnyActionActive covers all loading/action states
+  if (currentUserMessage.value.trim() === '' || isAnyActionActive.value) return;
   const userMessageText = currentUserMessage.value;
   chatMessages.value.push({ sender: 'user', text: userMessageText, timestamp: new Date() });
   currentUserMessage.value = ''; 
   isPetTyping.value = true; 
-
   try {
     const response = await fetch(`${API_BASE_URL}/pets/chat`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -423,10 +465,23 @@ const sendMessage = async () => {
 // --- Voice Input Logic ---
 const toggleVoiceListening = () => {
   if (!speechApiSupported.value || isAnyActionActiveButVoice.value) return;
-  if (isListening.value) recognition.stop();
-  else {
-    try { recognition.start(); isListening.value = true; } 
-    catch (e) { console.error("Error starting speech recognition:", e); chatMessages.value.push({ sender: 'system', text: 'Voice recognition error.', timestamp: new Date() });}
+  if (isListening.value) {
+    if (recognition) recognition.stop();
+    isListening.value = false; 
+  } else {
+    if (recognition) {
+      try { 
+        recognition.start(); 
+        isListening.value = true; 
+      } 
+      catch (e) { 
+        console.error("Error starting speech recognition:", e);
+        chatMessages.value.push({ sender: 'system', text: 'Voice recognition error. Could not start.', timestamp: new Date() });
+        isListening.value = false; 
+      }
+    } else {
+        chatMessages.value.push({ sender: 'system', text: 'Voice recognition not initialized.', timestamp: new Date() });
+    }
   }
 };
 const setupSpeechRecognition = () => {
@@ -442,14 +497,18 @@ const setupSpeechRecognition = () => {
     recognition.onerror = (event) => {
       console.error("Speech error:", event.error);
       let msg = "Voice error.";
-      if (event.error === 'no-speech') msg = "No speech detected.";
-      else if (event.error === 'audio-capture') msg = "Mic problem.";
-      else if (event.error === 'not-allowed') msg = "Mic access denied.";
+      if (event.error === 'no-speech') msg = "No speech detected. Please try again.";
+      else if (event.error === 'audio-capture') msg = "Microphone problem. Please check your microphone.";
+      else if (event.error === 'not-allowed') msg = "Microphone access denied. Please allow access in your browser settings.";
       chatMessages.value.push({ sender: 'system', text: msg, timestamp: new Date() });
       isListening.value = false;
     };
     recognition.onend = () => { isListening.value = false; };
-  } else speechApiSupported.value = false;
+    console.log('PetsView.vue: Speech recognition setup complete.');
+  } else {
+    speechApiSupported.value = false;
+    console.warn('PetsView.vue: Speech recognition not supported by this browser.');
+  }
 };
 
 // --- Voice Output (TTS) Logic ---
@@ -458,28 +517,129 @@ const speakText = (text) => {
   if (synth.speaking) synth.cancel(); 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-US'; 
-  utterance.onerror = (event) => { console.error('TTS error', event); chatMessages.value.push({ sender: 'system', text: `Speech error: ${event.error}`, timestamp: new Date()}); };
+  utterance.onerror = (event) => { 
+    console.error('TTS error', event); 
+    chatMessages.value.push({ sender: 'system', text: `Speech synthesis error: ${event.error}`, timestamp: new Date()}); 
+  };
   synth.speak(utterance);
 };
 const toggleTts = () => {
   isTtsEnabled.value = !isTtsEnabled.value;
   if (!isTtsEnabled.value && synth && synth.speaking) synth.cancel();
   const status = isTtsEnabled.value ? "enabled" : "disabled";
-  chatMessages.value.push({ sender: 'system', text: `Voice output ${status}.`, timestamp: new Date() });
-  speakText(`Voice output ${status}.`);
+  const ttsMessage = `Voice output ${status}.`;
+  chatMessages.value.push({ sender: 'system', text: ttsMessage, timestamp: new Date() });
+  speakText(ttsMessage);
 };
 const setupSpeechSynthesis = () => {
-  if ('speechSynthesis' in window) synth = window.speechSynthesis;
-  else ttsSupported.value = false;
+  if ('speechSynthesis' in window) {
+    synth = window.speechSynthesis;
+    console.log('PetsView.vue: Speech synthesis setup complete.');
+  } else {
+    ttsSupported.value = false;
+    console.warn('PetsView.vue: Speech synthesis not supported by this browser.');
+  }
 };
 
 // --- Three.js Model Update Logic ---
-const removeCurrentPetModel = () => { /* ... (unchanged, uses currentPetModel) ... */ };
-const updatePetModelDisplay = (petDisplayData) => { /* ... (unchanged, uses textureLoader, currentPetModel) ... */ };
+const removeCurrentPetModel = () => {
+  console.log('removeCurrentPetModel: Called');
+  if (currentPetModel) {
+    console.log('removeCurrentPetModel: Removing model:', currentPetModel.name || currentPetModel.uuid);
+    if (scene && scene.remove) { scene.remove(currentPetModel); }
+    if (currentPetModel.geometry && typeof currentPetModel.geometry.dispose === 'function') { currentPetModel.geometry.dispose(); }
+    if (currentPetModel.material) {
+      if (currentPetModel.material.map && typeof currentPetModel.material.map.dispose === 'function') { currentPetModel.material.map.dispose(); }
+      if (typeof currentPetModel.material.dispose === 'function') { currentPetModel.material.dispose(); }
+    }
+    currentPetModel = null;
+    console.log('removeCurrentPetModel: Model removed and resources disposed (attempted).');
+  } else {
+    console.log('removeCurrentPetModel: No currentPetModel to remove.');
+  }
+};
+
+const updatePetModelDisplay = (petDisplayData) => {
+  console.log('updatePetModelDisplay: Called with petDisplayData:', JSON.parse(JSON.stringify(petDisplayData || {})));
+  isModelLoading.value = true;
+  removeCurrentPetModel();
+
+  let imageUrl = petDisplayData?.fullNftData?.imageUrl;
+  if (!imageUrl && petDisplayData?.fullNftData?.metadata?.imageUrl) {
+    imageUrl = petDisplayData.fullNftData.metadata.imageUrl;
+  }
+  console.log('updatePetModelDisplay: Using imageUrl:', imageUrl);
+
+  if (!imageUrl) {
+    console.error('updatePetModelDisplay: No imageUrl found in petDisplayData.');
+    if (scene) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(petDisplayData?.color || 0xff00ff) });
+        currentPetModel = new THREE.Mesh(geometry, material);
+        currentPetModel.name = "FallbackCube_NoImage";
+        scene.add(currentPetModel);
+        console.log('updatePetModelDisplay: Fallback cube created due to no imageUrl.');
+    } else {
+        console.error('updatePetModelDisplay: Scene not initialized, cannot create fallback cube.');
+    }
+    isModelLoading.value = false;
+    return;
+  }
+  
+  console.log('updatePetModelDisplay: Attempting to load texture:', imageUrl);
+  textureLoader.load(
+    imageUrl,
+    (texture) => { 
+      console.log('updatePetModelDisplay: Texture loaded successfully for:', imageUrl);
+      if (!scene) {
+          console.error('updatePetModelDisplay: Scene not initialized, cannot add model.');
+          isModelLoading.value = false;
+          return;
+      }
+      const aspectRatio = texture.image ? texture.image.width / texture.image.height : 1;
+      const planeHeight = 2;
+      const planeWidth = planeHeight * aspectRatio;
+      const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+      currentPetModel = new THREE.Mesh(geometry, material);
+      currentPetModel.name = `PetPlane_${petDisplayData?.id || 'UnknownID'}`;
+      
+      currentPetModel.position.set(0, 0, 0);
+      currentPetModel.rotation.set(0, 0, 0); 
+      modelOriginalPosition.copy(currentPetModel.position);
+      modelOriginalRotation.copy(currentPetModel.rotation);
+      modelOriginalScale.copy(currentPetModel.scale);
+
+      scene.add(currentPetModel);
+      console.log('updatePetModelDisplay: Image plane created and added to scene. Name:', currentPetModel.name);
+      isModelLoading.value = false;
+    },
+    undefined, 
+    (error) => { 
+      console.error('updatePetModelDisplay: Texture FAILED to load for:', imageUrl, error);
+      if (scene) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(petDisplayData?.color || 0xff0000) });
+        currentPetModel = new THREE.Mesh(geometry, material);
+        currentPetModel.name = "ErrorFallbackCube_TextureLoad";
+        scene.add(currentPetModel);
+        console.log('updatePetModelDisplay: Error fallback cube created due to texture load failure.');
+      } else {
+        console.error('updatePetModelDisplay: Scene not initialized, cannot create error fallback cube.');
+      }
+      isModelLoading.value = false;
+    }
+  );
+};
 
 // --- NFT Selection & Data Handling ---
 const selectNFT = async (nft) => { 
-  if (isLoadingPetData.value || isAnyActionActive.value) return;
+  console.log('selectNFT: Called with NFT:', JSON.parse(JSON.stringify(nft)));
+  if (isLoadingPetData.value || (isAnyActionActive.value && selectedNftId.value === nft.id)) { // Allow re-selection if no action is active
+      console.warn('selectNFT: Action prevented. isLoadingPetData:', isLoadingPetData.value, 'isAnyActionActive:', isAnyActionActive.value, 'Same NFT selected during action:', selectedNftId.value === nft.id);
+      return;
+  }
+  
   selectedNftId.value = nft.id; 
   isLoadingPetData.value = true; 
   selectedPetData.value = null; 
@@ -487,42 +647,69 @@ const selectNFT = async (nft) => {
   if (synth && synth.speaking) synth.cancel();
 
   try {
-    // const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`);
-    // if (!displayDataResponse.ok) throw new Error(`HTTP error! status: ${displayDataResponse.status}`);
-    // const backendDisplayProfile = await displayDataResponse.json();
-    const backendDisplayProfile = {modelType: 'dog', color: 'blue'};
-    selectedPetData.value = { 
-      id: nft.id, displayName: nft.name,
-      modelType: backendDisplayProfile.modelType, color: backendDisplayProfile.color,
-      level: nft.metadata.level, fullNftData: nft,
+    const displayDataResponse = await fetch(`${API_BASE_URL}/pets/${nft.id}`);
+    if (!displayDataResponse.ok) throw new Error(`HTTP error! status: ${displayDataResponse.status}`);
+    const backendDisplayProfile = await displayDataResponse.json();
+
+    const petFullData = { 
+      id: nft.id, 
+      displayName: nft.name,
+      modelType: backendDisplayProfile.modelType, 
+      color: backendDisplayProfile.color,
+      level: nft.metadata.level, 
+      fullNftData: nft, 
     };
+    selectedPetData.value = petFullData;
+    console.log('selectNFT: selectedPetData.value assigned:', JSON.parse(JSON.stringify(selectedPetData.value)));
+    
     await nextTick(); 
     const currentContainer = isMobile.value ? sceneContainerMobile.value : sceneContainerDesktop.value;
-    if (currentContainer && scene) updatePetModelDisplay(selectedPetData.value); 
-    else if (currentContainer && !scene) {
-        cleanupThreeSceneFunc = setupThreeScene(currentContainer);
-        updatePetModelDisplay(selectedPetData.value);
+    if (currentContainer) {
+        if (!sceneInitialized || (renderer && renderer.domElement.parentElement !== currentContainer)) {
+             console.log("selectNFT: Scene not initialized for current container or needs re-parenting. Calling setupThreeScene.");
+             cleanupThreeSceneFunc(); // Clean up previous if any (e.g. after layout switch)
+             cleanupThreeSceneFunc = setupThreeScene(currentContainer);
+        }
+        console.log('selectNFT: About to call updatePetModelDisplay with:', JSON.parse(JSON.stringify(selectedPetData.value)));
+        updatePetModelDisplay(selectedPetData.value); 
+        console.log('selectNFT: updatePetModelDisplay was called.');
+    } else {
+        console.error('selectNFT: No valid scene container found to update model display.');
     }
-    if (isMobile.value) activeMobileTab.value = '3d-space';
+
+    if (isMobile.value && activeMobileTab.value !== '3d-space') {
+        activeMobileTab.value = '3d-space'; 
+    }
     
     isPetTyping.value = true; 
-    // const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, {
-    //     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ userId: 'tempUser', message: `Hello, I'm ${selectedPetData.value.displayName}` })
-    // });
-    // const greetingData = await greetingResponse.json(); 
-    // if (!greetingResponse.ok) throw new Error(greetingData.reply || `Greeting HTTP error!`);
-    // const greetingText = greetingData.reply;
-    const greetingText = "Hello, I'm MetaPet";
+    console.log('selectNFT: Fetching initial greeting for:', selectedPetData.value.displayName);
+    const greetingResponse = await fetch(`${API_BASE_URL}/pets/chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'tempUser', message: `Hello, I'm ${selectedPetData.value.displayName}` })
+    });
+    const greetingData = await greetingResponse.json(); 
+    if (!greetingResponse.ok) {
+      console.error('selectNFT: Failed to fetch initial AI greeting.', greetingData.reply || `Greeting HTTP error!`);
+      throw new Error(greetingData.reply || `Greeting HTTP error!`);
+    }
+    console.log('selectNFT: Initial AI greeting fetched successfully.');
+    const greetingText = greetingData.reply;
     chatMessages.value.push({ sender: 'pet', text: greetingText, timestamp: new Date() });
     speakText(greetingText);
 
   } catch (error) {
-    console.error('Failed to select NFT:', error);
+    console.error('selectNFT: Failed to select NFT or get initial greeting:', error);
     const errorText = error.message || "Sorry, I had trouble getting ready.";
-    const errorDisplayData = { displayName: nft.name || "Error", modelType: 'default', color: '#FF0000', fullNftData: nft };
-     selectedPetData.value = { id: nft.id, displayName: nft.name || "Error", modelType: 'default', color: '#FF0000', level: 0, fullNftData: nft };
-    updatePetModelDisplay(errorDisplayData);
+    const errorDisplayData = { 
+        displayName: nft.name || "Error Pet", 
+        modelType: 'default', 
+        color: '#FF0000', 
+        fullNftData: nft,
+        level: 0,
+        id: nft.id
+    };
+    selectedPetData.value = errorDisplayData;
+    if (scene) updatePetModelDisplay(errorDisplayData); 
     chatMessages.value.push({ sender: 'pet', text: errorText, timestamp: new Date() });
     speakText(errorText);
   } finally {
@@ -535,36 +722,186 @@ const selectNFT = async (nft) => {
 // --- Three.js Scene Setup ---
 let sceneInitialized = false;
 let cleanupThreeSceneFunc = () => {};
-const setupThreeScene = (containerElement) => { /* ... (unchanged) ... */ };
 
-// --- Lifecycle Hooks ---
+const setupThreeScene = (containerElement) => {
+  console.log('setupThreeScene: Called with container:', containerElement);
+  if (!containerElement) {
+    console.error('setupThreeScene: Container element is null or undefined. Scene setup aborted.');
+    return () => {}; 
+  }
+  if (sceneInitialized && renderer && renderer.domElement.parentElement === containerElement) {
+      console.warn('setupThreeScene: Scene already initialized in this container. Aborting duplicate setup.');
+      return cleanupThreeSceneFunc; 
+  }
+
+  cleanupThreeSceneFunc(); // Clean up any existing scene first
+
+  sceneInitialized = true;
+  clock = new THREE.Clock();
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf0f0f0); 
+
+  const width = containerElement.clientWidth;
+  const height = containerElement.clientHeight > 0 ? containerElement.clientHeight : 250; // Ensure height is positive
+  camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+  camera.position.set(0, 0.5, 2.5); 
+  camera.lookAt(0, 0, 0);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  containerElement.innerHTML = ''; // Clear previous canvas if any
+  containerElement.appendChild(renderer.domElement);
+  console.log('setupThreeScene: Renderer appended to container.');
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2.5); 
+  scene.add(ambientLight);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  directionalLight.position.set(1, 2, 3);
+  scene.add(directionalLight);
+  console.log('setupThreeScene: Scene, camera, renderer, lights created.');
+
+  const animate = () => {
+    if (!sceneInitialized) return;
+    animationFrameId = requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (currentPetModel && currentPetModel.rotation && !isAnyActionActive.value) { 
+      currentPetModel.rotation.y += delta * 0.4; 
+    }
+    if(renderer && scene && camera) renderer.render(scene, camera);
+  };
+  animate();
+  console.log('setupThreeScene: Animation loop started.');
+
+  const handleResize = () => {
+    if (!renderer || !camera || !containerElement || !sceneInitialized) return;
+    const newWidth = containerElement.clientWidth;
+    const newHeight = containerElement.clientHeight > 0 ? containerElement.clientHeight : 250;
+    if (newWidth === 0 || newHeight === 0) return;
+    camera.aspect = newWidth / newHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(newWidth, newHeight);
+    console.log('setupThreeScene: Resized to', newWidth, newHeight);
+  };
+  window.addEventListener('resize', handleResize);
+
+  const localCleanup = () => {
+    console.log('setupThreeScene: localCleanup called.');
+    sceneInitialized = false;
+    if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null;
+    window.removeEventListener('resize', handleResize);
+    removeCurrentPetModel();
+    if (renderer) {
+      renderer.dispose();
+      if (renderer.domElement && renderer.domElement.parentElement) {
+        renderer.domElement.parentElement.removeChild(renderer.domElement);
+      }
+      renderer = null;
+    }
+    if (scene) scene = null;
+    camera = null; clock = null;
+    console.log('setupThreeScene: Scene cleaned up via localCleanup.');
+  };
+  cleanupThreeSceneFunc = localCleanup;
+  return localCleanup;
+};
+
+// --- Lifecycle Hooks & Responsive Logic ---
 onMounted(async () => { 
+  console.log('PetsView.vue: onMounted hook started');
   isLoadingNFTList.value = true;
-  try { userNFTs.value = await fetchUserNFTs('currentUser123'); } 
-  catch (error) { console.error("PetsView.vue: CRITICAL - Failed to fetch user NFTs:", error); userNFTs.value = []; } 
-  finally { isLoadingNFTList.value = false; }
+  try {
+    console.log('PetsView.vue: About to call fetchUserNFTs');
+    const nfts = await fetchUserNFTs('currentUser123'); 
+    console.log('PetsView.vue: Data received from fetchUserNFTs:', JSON.parse(JSON.stringify(nfts)));
+    userNFTs.value = nfts;
+    console.log('PetsView.vue: userNFTs.value after assignment:', JSON.parse(JSON.stringify(userNFTs.value)));
+  } catch (error) {
+    console.error("PetsView.vue: CRITICAL - Failed to fetch user NFTs in onMounted:", error);
+    userNFTs.value = []; 
+  } finally {
+    isLoadingNFTList.value = false;
+  }
+
   window.addEventListener('resize', checkMobile);
   checkMobile(); 
-  await nextTick();
+
+  await nextTick(); 
   const initialContainer = isMobile.value ? sceneContainerMobile.value : sceneContainerDesktop.value;
-  if (initialContainer && (!isMobile.value || activeMobileTab.value === '3d-space')) { // Only init if desktop or mobile 3D tab active
+  console.log('CALLER_OF_SETUP: [onMounted] About to call setupThreeScene. Container visible/ready?:', !!initialContainer);
+  if (initialContainer && (!isMobile.value || activeMobileTab.value === '3d-space')) {
     cleanupThreeSceneFunc = setupThreeScene(initialContainer);
   } else {
-    console.log("Initial scene setup deferred (mobile tab not 3d-space or container not ready).");
+    console.log("onMounted: Initial scene setup deferred (mobile tab not 3d-space or container not ready).");
   }
   setupSpeechRecognition(); 
   setupSpeechSynthesis(); 
+  console.log('PetsView.vue: onMounted hook finished');
 });
+
 onUnmounted(() => { 
+  console.log('PetsView.vue: onUnmounted hook called.');
   window.removeEventListener('resize', checkMobile);
   cleanupThreeSceneFunc(); 
-  if (recognition) { recognition.stop(); recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition = null; }
+  if (recognition) { 
+    recognition.stop(); recognition.onresult = null; recognition.onerror = null; recognition.onend = null; recognition = null; 
+  }
   if (synth && synth.speaking) synth.cancel();
 });
 
-const onMobileTabChange = async (tabName) => { /* ... (unchanged) ... */ };
-watch(isMobile, async (newIsMobile) => { /* ... (unchanged) ... */ });
-const getContrastingTextColor = (hexColor) => { /* ... (unchanged) ... */ };
+const onMobileTabChange = async (tabName) => {
+  console.log('CALLER_OF_SETUP: [onMobileTabChange] Tab changed to:', tabName, 'isMobile:', isMobile.value);
+  await nextTick(); 
+  const currentContainer = sceneContainerMobile.value;
+  if (tabName === '3d-space' && isMobile.value && currentContainer) {
+    if (!sceneInitialized || (renderer && renderer.domElement.parentElement !== currentContainer)) {
+      console.log("onMobileTabChange: Setting up or re-attaching scene for 3D Space tab.");
+      cleanupThreeSceneFunc(); 
+      cleanupThreeSceneFunc = setupThreeScene(currentContainer);
+      if (selectedPetData.value) { 
+        console.log('onMobileTabChange: Re-displaying selected pet model after tab change.');
+        updatePetModelDisplay(selectedPetData.value);
+      }
+    } else {
+      console.log('onMobileTabChange: Scene already initialized and attached to mobile container or container not ready.');
+    }
+  } else if (tabName !== '3d-space' && isMobile.value && sceneInitialized) {
+    console.log('onMobileTabChange: Switched away from 3D tab on mobile. Cleaning up scene.');
+    cleanupThreeSceneFunc();
+  }
+};
+
+watch(isMobile, async (newIsMobileValue, oldIsMobileValue) => {
+  if (newIsMobileValue === oldIsMobileValue) return;
+  console.log('CALLER_OF_SETUP: [watch isMobile] Layout changed. New isMobile:', newIsMobileValue);
+  
+  cleanupThreeSceneFunc(); 
+  await nextTick(); 
+  
+  let targetContainer = null;
+  if (newIsMobileValue) {
+    if (activeMobileTab.value === '3d-space') {
+      targetContainer = sceneContainerMobile.value;
+    } else {
+      console.log('watch isMobile: Switched to mobile, but 3D tab not active. Scene setup deferred.');
+      return; // Don't setup scene if 3D tab isn't active on mobile
+    }
+  } else {
+    targetContainer = sceneContainerDesktop.value;
+  }
+  
+  console.log(`CALLER_OF_SETUP: [watch isMobile] Target container for scene setup: ${targetContainer ? 'found' : 'not found'}`);
+  if (targetContainer) {
+    cleanupThreeSceneFunc = setupThreeScene(targetContainer);
+    if (selectedPetData.value) { 
+      console.log('watch isMobile: Re-displaying selected pet model after layout change.');
+      updatePetModelDisplay(selectedPetData.value);
+    }
+  } else {
+    console.error("watch isMobile: No target container available for scene setup after layout change.");
+  }
+});
 
 </script>
 
@@ -671,7 +1008,7 @@ const getContrastingTextColor = (hexColor) => { /* ... (unchanged) ... */ };
 
 .speech-support-notice { 
   font-size: 0.8em; color: #777; text-align: center; padding: 5px 10px; 
-  background-color: var(--van-background, #fff);
+  background-color: var(--van-background-2, #f7f8fa);
 }
 
 /* Ensure Vant tabs fill height if possible, or page container scrolls */

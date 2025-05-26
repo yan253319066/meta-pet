@@ -33,13 +33,7 @@ import {
     Radio,
     RadioGroup,
     NoticeBar,
-    Form,
-    Empty,
-    Cell,
-    Tag,
-    Card,
-    Col,
-    Row
+    Form
 } from 'vant'
 import enUS from 'vant/es/locale/lang/en-US'
 import zhTW from 'vant/es/locale/lang/zh-TW'
@@ -81,12 +75,6 @@ app.use(Radio)
 app.use(RadioGroup)
 app.use(NoticeBar)
 app.use(Form)
-app.use(Empty)
-app.use(Cell)
-app.use(Tag)
-app.use(Card)
-app.use(Col)
-app.use(Row)
 app.use(router)
 app.use(i18n)
 
