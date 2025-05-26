@@ -260,7 +260,7 @@ onMounted(async() => {
   if(inviteCode)
     localStorage.setItem("parentInviteCode", inviteCode);
 
-  try {
+  try { 
     // loadingStore.showLoading()
     request.get('/market/popularList').then((res)=>{
       popularItems.value = res?.data
